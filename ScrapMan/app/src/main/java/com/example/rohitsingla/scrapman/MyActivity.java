@@ -11,10 +11,18 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Toast;
 
+import com.amazonaws.mobileconnectors.dynamodbv2.dynamodbmapper.DynamoDBMapper;
+import com.amazonaws.mobileconnectors.dynamodbv2.dynamodbmapper.DynamoDBQueryExpression;
+import com.amazonaws.mobileconnectors.dynamodbv2.dynamodbmapper.DynamoDBScanExpression;
+import com.amazonaws.mobileconnectors.dynamodbv2.dynamodbmapper.ScanResultPage;
+import com.amazonaws.services.dynamodbv2.model.AttributeValue;
 import com.example.rohitsingla.scrapman.amazonaws.mobile.AWSMobileClient;
 import com.example.rohitsingla.scrapman.amazonaws.models.nosql.ScrapCategoryDO;
 
 import java.sql.SQLException;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 
 public class MyActivity extends Activity {
@@ -124,7 +132,7 @@ public class MyActivity extends Activity {
             }
         });
 
-        final ScrapCategoryDO myScrapCategoryObj = new ScrapCategoryDO();
+        /*final ScrapCategoryDO myScrapCategoryObj = new ScrapCategoryDO();
         for(int i=0;i<categoryNames.length;i++){
             myScrapCategoryObj.setCategoryName(categoryNames[i]);
             myScrapCategoryObj.setUnitPrice(prices[i]);
@@ -132,8 +140,9 @@ public class MyActivity extends Activity {
 
                 @Override
                 public void run() {
-                    AWSMobileClient.defaultMobileClient().getDynamoDBMapper().save(myScrapCategoryObj);
-                    ScrapCategoryDO myScrapCategoryObj1 = AWSMobileClient.defaultMobileClient().getDynamoDBMapper().load(ScrapCategoryDO.class,"Plastic");
+                    //AWSMobileClient.defaultMobileClient().getDynamoDBMapper().save(myScrapCategoryObj);
+                    //ScrapCategoryDO myScrapCategoryObj1 = AWSMobileClient.defaultMobileClient().getDynamoDBMapper().load(ScrapCategoryDO.class,"Plastic");
+                    ScrapCategoryDO myScrapCategoryObj1 = AWSMobileClient.defaultMobileClient().getDynamoDBMapper().load(ScrapCategoryDO.class);
                     if(myScrapCategoryObj1!=null)
                         Log.d(TAG, "Scrap Category = "+myScrapCategoryObj1.getUnitPrice());
                     else
@@ -142,7 +151,31 @@ public class MyActivity extends Activity {
             };
             Thread myThread = new Thread(runnable);
             myThread.start();
-        }
+        }*/
+
+        Runnable runnable = new Runnable(){
+
+            @Override
+            public void run() {
+                /*AWSMobileClient.defaultMobileClient().getDynamoDBMapper().save(myScrapCategoryObj);
+                ScrapCategoryDO myScrapCategoryObj1 = AWSMobileClient.defaultMobileClient().getDynamoDBMapper().load(ScrapCategoryDO.class,"Plastic");
+                Log.d(TAG,"Rohit category name = "+myScrapCategoryObj1.getCategoryName()+", unit price = "+myScrapCategoryObj1.getUnitPrice());*/
+
+                DynamoDBMapper myDynamoDbMapper = AWSMobileClient.defaultMobileClient().getDynamoDBMapper();
+                try {
+                    FindAllScrapCategories(myDynamoDbMapper);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+                /*ScrapCategoryDO myScrapCategoryObj1 = AWSMobileClient.defaultMobileClient().getDynamoDBMapper().load(ScrapCategoryDO.class);
+                final ScrapCategoryDO myHashKeyValues = new ScrapCategoryDO();
+                DynamoDBQueryExpression<ScrapCategoryDO> queryExpression = new DynamoDBQueryExpression<ScrapCategoryDO>().setHashKeyValues(myHashKeyValues);
+                List<ScrapCategoryDO> allScrapCategories = AWSMobileClient.defaultMobileClient().getDynamoDBMapper().query(ScrapCategoryDO.class, queryExpression);
+                Log.d(TAG, "Number of Scrap Categories = "+allScrapCategories.size());*/
+            }
+        };
+        Thread myThread = new Thread(runnable);
+        myThread.start();
     }
 
     //For AmazonAWS
@@ -152,6 +185,49 @@ public class MyActivity extends Activity {
         AWSMobileClient.initializeMobileClientIfNecessary(getApplicationContext());
 
         // ... Put any application-specific initialization logic here ...
+    }
+
+    private void FindAllScrapCategories(DynamoDBMapper mapper)
+            throws Exception {
+        Log.d(TAG, "Find all scrap categories:-");
+
+        Map<String, AttributeValue> eav = new HashMap<String, AttributeValue>();
+        eav.put(":val1", new AttributeValue().withS("12"));
+
+        /*DynamoDBQueryExpression<ScrapCategoryDO> queryExpression = new DynamoDBQueryExpression<ScrapCategoryDO>()
+                .withKeyConditionExpression("categoryName = :val1").withExpressionAttributeValues(eav);*/
+
+        //DynamoDBQueryExpression<ScrapCategoryDO> queryExpression = new DynamoDBQueryExpression<ScrapCategoryDO>();
+
+        ScrapCategoryDO myObject = new ScrapCategoryDO();
+        myObject.setCategoryName("Iron");
+        DynamoDBQueryExpression<ScrapCategoryDO> queryExpression = new DynamoDBQueryExpression<ScrapCategoryDO>()
+                .withHashKeyValues(myObject)
+                .withFilterExpression("UnitPrice < :val1")
+                .withExpressionAttributeValues(eav);
+
+        List<ScrapCategoryDO> latestReplies = mapper.query(ScrapCategoryDO.class, queryExpression);
+        Log.d(TAG, "Number of categories = "+latestReplies.size());
+        for (ScrapCategoryDO reply : latestReplies) {
+            Log.d(TAG,"category name = "+reply.getCategoryName()+", unit price = "+ reply.getUnitPrice());
+        }
+
+        ScanResultPage<ScrapCategoryDO> yourModelClassResultPage = null;
+        do {
+            //DynamoDBMapper dynamoDBMapper = new DynamoDBMapper(dynamoDBClient);
+            DynamoDBScanExpression scanExpression = new DynamoDBScanExpression();
+            if (yourModelClassResultPage != null) {
+                scanExpression.setExclusiveStartKey(yourModelClassResultPage.getLastEvaluatedKey());
+            }
+            yourModelClassResultPage = mapper.scanPage(ScrapCategoryDO.class, scanExpression);
+            Log.d(TAG,"Hey, "+yourModelClassResultPage.getResults().size());
+            List<ScrapCategoryDO> myList = yourModelClassResultPage.getResults();
+            int n = myList.size();
+            for(int i=0;i<n;i++){
+                Log.d(TAG,"CategoryName = "+myList.get(i).getCategoryName()+"UnitPrice = "+myList.get(i).getUnitPrice());
+            }
+
+        } while (yourModelClassResultPage.getLastEvaluatedKey() != null);
     }
 
 
